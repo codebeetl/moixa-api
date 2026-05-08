@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moixa-py"
+version = "0.1.0"
+description = "Unofficial Python client for the Moixa GridShare API inferred from APK analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["requests>=2.31.0"]
+authors = [{name = "Perplexity"}]
+
+[project.scripts]
+moixa = "moixa_py.cli:main"
+
+[tool.setuptools]
+packages = ["moixa_py"]
