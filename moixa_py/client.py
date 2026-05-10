@@ -180,6 +180,86 @@ class MoixaClient:
         )
         response.raise_for_status()
 
+    # --- Schedule slot helpers (all read-modify-write via set_device_operation_schedule) ---
+
+    @staticmethod
+    def _build_intent(kind: str, soc_min: float, soc_max: float,
+                      power_watts: float = None,
+                      power_watts_min: float = None,
+                      power_watts_max: float = None) -> dict:
+        if kind not in ('balance', 'charge/discharge', 'idle'):
+            raise MoixaError(f"Unknown intent kind {kind!r}. Use 'balance', 'charge/discharge', or 'idle'.")
+        intent: dict = {'kind': kind, 'socMin': soc_min, 'socMax': soc_max}
+        if kind == 'charge/discharge':
+            if power_watts is None:
+                raise MoixaError("power_watts is required for 'charge/discharge' intent")
+            intent['powerWatts'] = power_watts
+        elif kind == 'balance':
+            intent['powerWattsMin'] = power_watts_min if power_watts_min is not None else -20
+            intent['powerWattsMax'] = power_watts_max if power_watts_max is not None else 20
+        return intent
+
+    def add_schedule_intent(self, device_id: str, kind: str, duration_minutes: int,
+                             position: int = -1, soc_min: float = 0.1, soc_max: float = 1.0,
+                             power_watts: float = None,
+                             power_watts_min: float = None,
+                             power_watts_max: float = None) -> None:
+        """Insert a new intent slot. Time is stolen from the neighbouring slot.
+        position=-1 appends to the end. Intent kinds: 'balance', 'charge/discharge', 'idle'."""
+        schedule = self.get_device_operation_schedule(device_id)
+        intents = schedule['plan']['intents']
+        if position == -1:
+            position = len(intents)
+        steal_idx = (position - 1) if position > 0 else 0
+        if intents[steal_idx]['durationMinutes'] <= duration_minutes:
+            raise MoixaError(
+                f'Slot {steal_idx} only has {intents[steal_idx]["durationMinutes"]} min; '
+                f'cannot steal {duration_minutes} min'
+            )
+        intents[steal_idx]['durationMinutes'] -= duration_minutes
+        intents.insert(position, {
+            'intent': self._build_intent(kind, soc_min, soc_max, power_watts, power_watts_min, power_watts_max),
+            'durationMinutes': duration_minutes,
+        })
+        self.set_device_operation_schedule(device_id, schedule['plan'])
+
+    def edit_schedule_intent(self, device_id: str, index: int,
+                              kind: str = None, duration_minutes: int = None,
+                              soc_min: float = None, soc_max: float = None,
+                              power_watts: float = None,
+                              power_watts_min: float = None,
+                              power_watts_max: float = None) -> None:
+        """Edit fields of an existing intent slot. Only supplied arguments are changed.
+        If duration_minutes changes, the difference is absorbed by the neighbouring slot."""
+        schedule = self.get_device_operation_schedule(device_id)
+        intents = schedule['plan']['intents']
+        slot = intents[index]
+        if duration_minutes is not None and duration_minutes != slot['durationMinutes']:
+            neighbour = (index - 1) if index > 0 else index + 1
+            diff = duration_minutes - slot['durationMinutes']
+            if intents[neighbour]['durationMinutes'] - diff < 1:
+                raise MoixaError(f'Slot {neighbour} cannot absorb a {diff:+d} min duration change')
+            intents[neighbour]['durationMinutes'] -= diff
+            slot['durationMinutes'] = duration_minutes
+        intent = slot['intent']
+        for attr, val in [('kind', kind), ('socMin', soc_min), ('socMax', soc_max),
+                          ('powerWatts', power_watts), ('powerWattsMin', power_watts_min),
+                          ('powerWattsMax', power_watts_max)]:
+            if val is not None:
+                intent[attr] = val
+        self.set_device_operation_schedule(device_id, schedule['plan'])
+
+    def delete_schedule_intent(self, device_id: str, index: int) -> None:
+        """Remove an intent slot. Its duration is given to the neighbouring slot."""
+        schedule = self.get_device_operation_schedule(device_id)
+        intents = schedule['plan']['intents']
+        if len(intents) <= 1:
+            raise MoixaError('Cannot delete the only schedule slot')
+        removed = intents.pop(index)
+        neighbour = (index - 1) if index > 0 else 0
+        intents[neighbour]['durationMinutes'] += removed['durationMinutes']
+        self.set_device_operation_schedule(device_id, schedule['plan'])
+
     def get_device_intent_time_series(self, device_id: str, interval_start: str, interval_end: str):
         response = self._get(
             f'{self.api_url}/users/current/devices/{device_id}/intentTimeSeries',
