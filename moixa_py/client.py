@@ -84,35 +84,114 @@ class MoixaClient:
             res = self.session.post(*args, **kwargs, auth=self._auth, timeout=30)
         return res
 
+    def _patch(self, *args: Any, **kwargs: Any) -> requests.Response:
+        res = self.session.patch(*args, **kwargs, auth=self._auth, timeout=30)
+        if res.status_code == 401 and self._try_refresh():
+            res = self.session.patch(*args, **kwargs, auth=self._auth, timeout=30)
+        return res
+
+    def _put(self, *args: Any, **kwargs: Any) -> requests.Response:
+        res = self.session.put(*args, **kwargs, auth=self._auth, timeout=30)
+        if res.status_code == 401 and self._try_refresh():
+            res = self.session.put(*args, **kwargs, auth=self._auth, timeout=30)
+        return res
+
     def get_site_users(self):
         response = self._get(f'{self.api_url}/users/current/siteUsers')
         response.raise_for_status()
         return response.json()
 
-    def get_current_user_sites(self):
-        response = self._get(f'{self.api_url}/users/current/sites')
+    def get_user_metadata(self):
+        response = self._get(f'{self.api_url}/users/current/metadata')
         response.raise_for_status()
         return response.json()
 
-    def get_core_readings(self, site_id: str):
+    def get_core_readings(self, site_id: str, time_range: str = 'latest',
+                          roller: str = '', utc_offset: int = 60):
+        params = {
+            'roller': roller,
+            'utcOffset': utc_offset,
+            'extendedBounds': 'true',
+            'timeRange': time_range,
+            'select': (
+                'core/consumption/in/AC/W,core/grid/in/AC/W,core/grid/out/AC/W,'
+                'core/production/out/AC/W,core/storage/in/AC/W,core/storage/out/AC/W,'
+                'derived/pc-delta/neg/W,derived/pc-delta/pos/W,'
+                'derived/pcs-delta/neg/W,derived/pcs-delta/pos/W'
+            ),
+        }
         response = self._get(
-            f'{self.api_url}/users/current/sites/{site_id}/coreReadingsV3'
-            '?roller=&utcOffset=60&extendedBounds=true&timeRange=latest'
-            '&select=core%2Fconsumption%2Fin%2FAC%2FW%2Ccore%2Fgrid%2Fin%2FAC%2FW'
-            '%2Ccore%2Fgrid%2Fout%2FAC%2FW%2Ccore%2Fproduction%2Fout%2FAC%2FW'
-            '%2Ccore%2Fstorage%2Fin%2FAC%2FW%2Ccore%2Fstorage%2Fout%2FAC%2FW'
-            '%2Cderived%2Fpc-delta%2Fneg%2FW%2Cderived%2Fpc-delta%2Fpos%2FW'
-            '%2Cderived%2Fpcs-delta%2Fneg%2FW%2Cderived%2Fpcs-delta%2Fpos%2FW'
+            f'{self.api_url}/users/current/sites/{site_id}/coreReadingsV3',
+            params=params,
         )
         response.raise_for_status()
         return response.json()
 
-    def get_device_status(self, device_id: str):
+    def get_device(self, device_id: str):
+        response = self._get(f'{self.api_url}/users/current/devices/{device_id}')
+        response.raise_for_status()
+        return response.json()
+
+    def get_device_status(self, device_id: str, time_range: str = 'latest'):
+        channels = ['consumption/AC/W', 'grid/AC/W', 'production/AC/W',
+                    'storage/AC/W', 'storage/SOC']
+        params = [
+            ('roller', '5m-avg'),
+            *[('channels', c) for c in channels],
+            ('timeRange', time_range),
+            ('utcOffset', 0),
+            ('extendedBounds', 'true'),
+            ('select', ','.join(channels)),
+        ]
         response = self._get(
-            f'{self.api_url}/users/current/devices/{device_id}/specificReadings'
-            '?channels=storage%2FSOC&timeRange=latest&roller=5m-avg'
-            '&extendedBounds=false&utcOffset=60'
-            '&select=storage%2FAC%2FW%2Cstorage%2FSOC'
+            f'{self.api_url}/users/current/devices/{device_id}/specificReadings',
+            params=params,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_device_current_operation_mode(self, device_id: str):
+        response = self._get(
+            f'{self.api_url}/users/current/devices/{device_id}/currentOperationMode'
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_device_operation_schedule(self, device_id: str):
+        response = self._get(
+            f'{self.api_url}/users/current/devices/{device_id}/operationModes/schedule'
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def set_device_operation_mode(self, device_id: str, mode: str) -> None:
+        """Switch mode: 'smart', 'schedule', or 'simple'."""
+        response = self._patch(
+            f'{self.api_url}/users/current/devices/{device_id}/currentOperationMode',
+            json={'mode': mode},
+        )
+        response.raise_for_status()
+
+    def set_device_operation_schedule(self, device_id: str, plan: dict) -> None:
+        """Replace the weekly schedule plan. Pass the full plan dict as returned by get_device_operation_schedule()."""
+        response = self._put(
+            f'{self.api_url}/users/current/devices/{device_id}/operationModes/schedule',
+            json={'plan': plan},
+        )
+        response.raise_for_status()
+
+    def get_device_intent_time_series(self, device_id: str, interval_start: str, interval_end: str):
+        response = self._get(
+            f'{self.api_url}/users/current/devices/{device_id}/intentTimeSeries',
+            params={'interval': f'{interval_start},{interval_end}'},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_device_tariff_time_series(self, device_id: str, interval_start: str, interval_end: str):
+        response = self._get(
+            f'{self.api_url}/users/current/devices/{device_id}/tariffTimeSeries',
+            params={'interval': f'{interval_start},{interval_end}'},
         )
         response.raise_for_status()
         return response.json()
@@ -128,4 +207,12 @@ class MoixaClient:
         if not battery_device_id:
             raise MoixaError('No battery device found')
         status_data = self.get_device_status(battery_device_id)
+        for col_data in status_data.get('data', [{}])[0].get('f', {}).values():
+            pass
+        soc_col = next(
+            (k for k, v in status_data['header']['columns'].items() if v['id'] == 'storage/SOC'),
+            None,
+        ) if status_data.get('header') else None
+        if soc_col:
+            return float(status_data['data'][0]['f'][soc_col]['v'])
         return float(status_data.get('data', [{}])[0].get('f', {}).get('1', {}).get('v', -1))
