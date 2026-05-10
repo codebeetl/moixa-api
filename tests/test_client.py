@@ -216,6 +216,51 @@ class TestDeleteScheduleIntent:
 
 
 # ---------------------------------------------------------------------------
+# parse_jts
+# ---------------------------------------------------------------------------
+
+class TestParseJts:
+    def _make_jts(self, cols, records):
+        return {
+            'header': {'columns': {str(i): {'name': n} for i, n in enumerate(cols)}},
+            'data': records,
+        }
+
+    def test_flattens_columns(self):
+        data = self._make_jts(
+            ['consumption_W', 'production_W'],
+            [{'ts': '2026-05-11T10:00:00.000Z', 'f': {'0': {'v': 500.0}, '1': {'v': 1200.0}}}],
+        )
+        rows = MoixaClient.parse_jts(data)
+        assert len(rows) == 1
+        assert rows[0] == {'ts': '2026-05-11T10:00:00.000Z', 'consumption_W': 500.0, 'production_W': 1200.0}
+
+    def test_missing_value_is_none(self):
+        data = self._make_jts(
+            ['consumption_W', 'production_W'],
+            [{'ts': '2026-05-11T00:00:00.000Z', 'f': {'0': {'v': 300.0}}}],
+        )
+        rows = MoixaClient.parse_jts(data)
+        assert rows[0]['production_W'] is None
+
+    def test_multiple_records(self):
+        data = self._make_jts(
+            ['val'],
+            [
+                {'ts': '2026-05-11T00:00:00.000Z', 'f': {'0': {'v': 1.0}}},
+                {'ts': '2026-05-11T00:30:00.000Z', 'f': {'0': {'v': 2.0}}},
+            ],
+        )
+        rows = MoixaClient.parse_jts(data)
+        assert len(rows) == 2
+        assert rows[1]['val'] == 2.0
+
+    def test_importable_as_top_level(self):
+        from moixa_py import parse_jts
+        assert callable(parse_jts)
+
+
+# ---------------------------------------------------------------------------
 # get_current_battery_level
 # ---------------------------------------------------------------------------
 
