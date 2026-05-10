@@ -14,5 +14,11 @@ authors = [{name = "Perplexity"}]
 [project.scripts]
 moixa = "moixa_py.cli:main"
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [tool.setuptools]
 packages = ["moixa_py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
