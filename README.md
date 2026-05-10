@@ -1,37 +1,16 @@
+
 # moixa-py
 
-Unofficial Python package for the Moixa GridShare platform, reconstructed from static analysis of the Android app.
+Unofficial Python client for the Moixa GridShare API, rebuilt around the older client's model: Cognito User Pool tokens -> Cognito Identity Pool credentials -> SigV4-signed API requests.
 
-## Features
-- Cognito login via `USER_PASSWORD_AUTH`
-- Token refresh and token-file persistence
-- Selected REST API wrappers for devices, readings, commands, and sites
-- CLI for login, refresh, site listing, and device lookup
-
-## Install
-```bash
-pip install .
-```
+## Usage
+1. Create a `CognitoTokens` object with at least an `id_token`.
+2. Build a `User` from those tokens.
+3. Pass the user into `MoixaClient`.
+4. Call API methods like `get_site_users()` or `get_current_battery_level()`.
 
 ## CLI
-```bash
-moixa login --username you@example.com --password 'secret'
-moixa sites
-moixa device <device_uuid>
-moixa refresh --username you@example.com
-```
+The CLI expects saved tokens in `~/.moixa_tokens.json` by default.
 
-## Python
-```python
-from moixa_py import MoixaCognitoAuth, MoixaClient
-
-auth = MoixaCognitoAuth('you@example.com', 'secret')
-tokens = auth.login_password()
-client = MoixaClient(tokens.access_token)
-print(client.get_current_user_sites())
-```
-
-## Caveats
-- This package is unofficial.
-- The app bundle suggests Cognito auth, but the original mobile client may use `USER_SRP_AUTH` instead of plain `USER_PASSWORD_AUTH`.
-- Some endpoint payloads were inferred and may need adjustment against live traffic.
+## Caveat
+This version does not implement interactive login. It assumes you already have valid Cognito tokens from a separate auth flow.

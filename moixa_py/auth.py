@@ -1,7 +1,5 @@
+
 from __future__ import annotations
-import base64
-import hashlib
-import hmac
 import json
 import os
 import time
@@ -9,22 +7,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import requests
+from pycognito import Cognito
 
-from .constants import AWS_REGION, COGNITO_IDP_ENDPOINT, COGNITO_USER_POOL_CLIENT_ID
+from .constants import COGNITO_USER_POOL_ID, COGNITO_USER_POOL_CLIENT_ID
 from .exceptions import MoixaAuthError
-
-
-def _aws_headers(target: str) -> Dict[str, str]:
-    return {
-        'Content-Type': 'application/x-amz-json-1.1',
-        'X-Amz-Target': target,
-    }
-
-
-def _secret_hash(username: str, client_id: str, client_secret: str) -> str:
-    digest = hmac.new(client_secret.encode(), (username + client_id).encode(), hashlib.sha256).digest()
-    return base64.b64encode(digest).decode()
 
 
 @dataclass
@@ -37,13 +23,20 @@ class CognitoTokens:
     obtained_at: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        data['obtained_at'] = data.get('obtained_at') or int(time.time())
-        return data
+        return asdict(self)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'CognitoTokens':
         return cls(**data)
+
+
+@dataclass
+class User:
+    tokens: CognitoTokens
+
+    @classmethod
+    def from_tokens(cls, tokens: CognitoTokens) -> 'User':
+        return cls(tokens=tokens)
 
 
 class TokenStore:
@@ -59,91 +52,53 @@ class TokenStore:
         return CognitoTokens.from_dict(json.loads(self.path.read_text()))
 
 
+def refresh_tokens(tokens: CognitoTokens) -> CognitoTokens:
+    """Renew access+id tokens using a saved refresh_token."""
+    if not tokens.refresh_token:
+        raise MoixaAuthError('No refresh_token available')
+    try:
+        u = Cognito(
+            COGNITO_USER_POOL_ID,
+            COGNITO_USER_POOL_CLIENT_ID,
+            id_token=tokens.id_token,
+            access_token=tokens.access_token,
+            refresh_token=tokens.refresh_token,
+        )
+        u.renew_access_token()
+    except Exception as exc:
+        raise MoixaAuthError(f'Token refresh failed: {exc}') from exc
+    return CognitoTokens(
+        access_token=u.access_token,
+        id_token=u.id_token or tokens.id_token,
+        refresh_token=tokens.refresh_token,
+        obtained_at=int(time.time()),
+    )
+
+
 class MoixaCognitoAuth:
-    def __init__(self, username: str, password: Optional[str] = None, client_id: str = COGNITO_USER_POOL_CLIENT_ID,
-                 region: str = AWS_REGION, client_secret: Optional[str] = None, session: Optional[requests.Session] = None):
+    """Authenticates against the Moixa Cognito User Pool using SRP."""
+
+    def __init__(
+        self,
+        username: str,
+        password: str,
+        user_pool_id: str = COGNITO_USER_POOL_ID,
+        client_id: str = COGNITO_USER_POOL_CLIENT_ID,
+    ):
         self.username = username
         self.password = password
+        self.user_pool_id = user_pool_id
         self.client_id = client_id
-        self.client_secret = client_secret
-        self.region = region
-        self.endpoint = COGNITO_IDP_ENDPOINT.replace(AWS_REGION, region)
-        self.session = session or requests.Session()
 
-    def _auth_parameters(self, auth_flow: str, refresh_token: Optional[str] = None) -> Dict[str, str]:
-        params = {'USERNAME': self.username}
-        if auth_flow == 'USER_PASSWORD_AUTH':
-            if not self.password:
-                raise MoixaAuthError('password required for USER_PASSWORD_AUTH')
-            params['PASSWORD'] = self.password
-        elif auth_flow == 'REFRESH_TOKEN_AUTH':
-            if not refresh_token:
-                raise MoixaAuthError('refresh token required for REFRESH_TOKEN_AUTH')
-            params['REFRESH_TOKEN'] = refresh_token
-        elif auth_flow == 'USER_SRP_AUTH':
-            raise MoixaAuthError('USER_SRP_AUTH not yet implemented in this package')
-        if self.client_secret:
-            params['SECRET_HASH'] = _secret_hash(self.username, self.client_id, self.client_secret)
-        return params
-
-    def initiate_auth(self, auth_flow: str = 'USER_PASSWORD_AUTH', refresh_token: Optional[str] = None) -> Dict[str, Any]:
-        payload = {
-            'AuthFlow': auth_flow,
-            'ClientId': self.client_id,
-            'AuthParameters': self._auth_parameters(auth_flow, refresh_token=refresh_token),
-        }
-        resp = self.session.post(self.endpoint, headers=_aws_headers('AWSCognitoIdentityProviderService.InitiateAuth'), json=payload, timeout=30)
-        if not resp.ok:
-            raise MoixaAuthError(f'{resp.status_code} {resp.text}')
-        return resp.json()
-
-    def login_password(self) -> CognitoTokens:
-        data = self.initiate_auth('USER_PASSWORD_AUTH')
-        result = data.get('AuthenticationResult')
-        if not result:
-            raise MoixaAuthError(f'Expected AuthenticationResult, got: {json.dumps(data)}')
+    def login(self) -> CognitoTokens:
+        try:
+            u = Cognito(self.user_pool_id, self.client_id, username=self.username)
+            u.authenticate(password=self.password)
+        except Exception as exc:
+            raise MoixaAuthError(f'Login failed: {exc}') from exc
         return CognitoTokens(
-            access_token=result.get('AccessToken'),
-            id_token=result.get('IdToken'),
-            refresh_token=result.get('RefreshToken'),
-            expires_in=result.get('ExpiresIn'),
-            token_type=result.get('TokenType'),
+            access_token=u.access_token,
+            id_token=u.id_token,
+            refresh_token=u.refresh_token,
             obtained_at=int(time.time()),
         )
-
-    def refresh(self, refresh_token: str) -> CognitoTokens:
-        data = self.initiate_auth('REFRESH_TOKEN_AUTH', refresh_token=refresh_token)
-        result = data.get('AuthenticationResult')
-        if not result:
-            raise MoixaAuthError(f'Expected AuthenticationResult, got: {json.dumps(data)}')
-        return CognitoTokens(
-            access_token=result.get('AccessToken'),
-            id_token=result.get('IdToken'),
-            refresh_token=refresh_token,
-            expires_in=result.get('ExpiresIn'),
-            token_type=result.get('TokenType'),
-            obtained_at=int(time.time()),
-        )
-
-    def forgot_password(self) -> Dict[str, Any]:
-        payload = {'ClientId': self.client_id, 'Username': self.username}
-        if self.client_secret:
-            payload['SecretHash'] = _secret_hash(self.username, self.client_id, self.client_secret)
-        resp = self.session.post(self.endpoint, headers=_aws_headers('AWSCognitoIdentityProviderService.ForgotPassword'), json=payload, timeout=30)
-        if not resp.ok:
-            raise MoixaAuthError(f'{resp.status_code} {resp.text}')
-        return resp.json()
-
-    def confirm_forgot_password(self, confirmation_code: str, new_password: str) -> Dict[str, Any]:
-        payload = {
-            'ClientId': self.client_id,
-            'Username': self.username,
-            'ConfirmationCode': confirmation_code,
-            'Password': new_password,
-        }
-        if self.client_secret:
-            payload['SecretHash'] = _secret_hash(self.username, self.client_id, self.client_secret)
-        resp = self.session.post(self.endpoint, headers=_aws_headers('AWSCognitoIdentityProviderService.ConfirmForgotPassword'), json=payload, timeout=30)
-        if not resp.ok:
-            raise MoixaAuthError(f'{resp.status_code} {resp.text}')
-        return resp.json() if resp.text else {'ok': True}

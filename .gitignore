@@ -1,3 +1,10 @@
+# ignore local creds
+bin
+lib64
+
+#ignore claude
+.claude
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

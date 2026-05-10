@@ -1,3 +1,4 @@
+
 class MoixaError(Exception):
     pass
 
