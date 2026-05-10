@@ -260,6 +260,23 @@ class MoixaClient:
         intents[neighbour]['durationMinutes'] += removed['durationMinutes']
         self.set_device_operation_schedule(device_id, schedule['plan'])
 
+    def get_site_forecasts(self, site_id: str, time_range_start: str, time_range_end: str,
+                           select: str = 'consumption_W,production_W'):
+        """Predicted consumption and solar production for a site over a time range.
+        time_range_start/end are ISO 8601 strings, e.g. '2026-05-10T00:00:00.000Z'."""
+        response = self._get(
+            f'{self.api_url}/users/current/sites/{site_id}/forecasts',
+            params={'select': select, 'timeRange': f'{time_range_start},{time_range_end}'},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_flex_dispatches(self):
+        """Flex dispatch events for the current user."""
+        response = self._get(f'{self.api_url}/users/current/flexDispatches')
+        response.raise_for_status()
+        return response.json()
+
     def get_device_intent_time_series(self, device_id: str, interval_start: str, interval_end: str):
         response = self._get(
             f'{self.api_url}/users/current/devices/{device_id}/intentTimeSeries',
