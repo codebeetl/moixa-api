@@ -9,14 +9,14 @@ description = "Unofficial Python client for the Moixa GridShare API inferred fro
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["requests>=2.34.2", "pycognito", "aws-requests-auth", "boto3>=1.43.40", "mcp[cli]>=1.28.1"]
-authors = [{name = "Perplexity"}]
+authors = [{name = "codebeetl"}]
 
 [project.scripts]
 moixa = "moixa_py.cli:main"
 moixa-mcp = "moixa_py.mcp_server:main"
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest>=9.1.1"]
 
 [tool.setuptools]
 packages = ["moixa_py"]
