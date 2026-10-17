@@ -1,4 +1,4 @@
-# moixa-py
+# moixa-api
 
 Unofficial Python client for the Moixa GridShare API, reverse-engineered from the Android app and live browser traffic. Authenticates using Cognito User Pool SRP, exchanges tokens for temporary AWS credentials via the Cognito Identity Pool, and signs API requests with SigV4, matching the mobile app's auth flow exactly.
 
@@ -15,7 +15,7 @@ Runtime dependencies: `pycognito`, `aws-requests-auth`, `boto3`, `requests`.
 ## Quick start
 
 ```python
-from moixa_py import MoixaCognitoAuth, MoixaClient, TokenStore
+from moixa_api import MoixaCognitoAuth, MoixaClient, TokenStore
 
 auth = MoixaCognitoAuth('you@example.com', 'yourpassword')
 tokens = auth.login()
@@ -130,7 +130,7 @@ The plan is aligned to Monday 00:00 UTC. `tz` is an IANA zone name, and its UTC 
 
 ```python
 from datetime import time
-from moixa_py.schedule_windows import ScheduleWindow
+from moixa_api.schedule_windows import ScheduleWindow
 
 # Charge to 100% all day, every day
 client.set_schedule(battery_id, [
@@ -169,7 +169,7 @@ client.set_device_operation_schedule(battery_id, saved)
 All time series endpoints return a JTS (JSON Time Series) structure. `parse_jts()` flattens it into a list of dicts:
 
 ```python
-from moixa_py import parse_jts
+from moixa_api import parse_jts
 
 forecasts = client.get_site_forecasts(site_id, start, end)
 for row in parse_jts(forecasts):

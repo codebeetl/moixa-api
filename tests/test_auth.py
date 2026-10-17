@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from moixa_py.auth import CognitoTokens, TokenStore, refresh_tokens
-from moixa_py.exceptions import MoixaAuthError
+from moixa_api.auth import CognitoTokens, TokenStore, refresh_tokens
+from moixa_api.exceptions import MoixaAuthError
 
 
 TOKENS = CognitoTokens(
