@@ -1,9 +1,11 @@
+from datetime import time
 from unittest.mock import MagicMock, patch, call
 import pytest
 
 from moixa_py.auth import CognitoTokens
 from moixa_py.client import MoixaClient
 from moixa_py.exceptions import MoixaError
+from moixa_py.schedule_windows import ScheduleWindow
 
 
 FAKE_TOKENS = CognitoTokens(
@@ -226,6 +228,40 @@ def plan_with(*slots, **intent_overrides):
     plan = make_schedule(*slots)['plan']
     plan['intents'][0]['intent'].update(intent_overrides)
     return plan
+
+
+class TestScheduleWindows:
+    def test_set_schedule_writes_the_whole_week_in_one_put(self):
+        client = make_client()
+        client.get_device_operation_schedule = MagicMock(return_value=make_schedule(('balance', 10080)))
+        client.set_device_operation_schedule = MagicMock()
+        window = ScheduleWindow(time(0, 0), time(0, 0), 'charge/discharge', power_watts=3000, soc_max=1.0)
+
+        client.set_schedule('dev', [window])
+
+        client.set_device_operation_schedule.assert_called_once()
+        plan = client.set_device_operation_schedule.call_args[0][1]
+        assert [slot['durationMinutes'] for slot in plan['intents']] == [10080]
+        assert plan['id'] == 'plan-1'
+
+    def test_get_schedule_returns_plan_and_windows(self):
+        client = make_client()
+        schedule = make_schedule(('idle', 10080))
+        client.get_device_operation_schedule = MagicMock(return_value=schedule)
+
+        result = client.get_schedule('dev')
+
+        assert result['plan'] == schedule['plan']
+        assert len(result['windows']) == 7
+
+    def test_restoring_a_saved_plan_uses_the_validated_put(self):
+        client = make_client()
+        client._put = MagicMock(return_value=mock_response({}))
+        saved = make_schedule(('balance', 10080))['plan']
+
+        client.set_device_operation_schedule('dev', saved)
+
+        client._put.assert_called_once()
 
 
 class TestSetDeviceOperationScheduleValidation:

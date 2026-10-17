@@ -7,6 +7,24 @@ DEFAULT_PERIOD_DAYS = 7
 INTENT_KINDS = ('balance', 'charge/discharge', 'idle')
 
 
+def build_intent(kind: str, soc_min: float, soc_max: float,
+                 power_watts: float | None = None,
+                 power_watts_min: float | None = None,
+                 power_watts_max: float | None = None) -> dict:
+    """Build the intent dict for a slot."""
+    if kind not in INTENT_KINDS:
+        raise MoixaError(f"Unknown intent kind {kind!r}. Use 'balance', 'charge/discharge', or 'idle'.")
+    intent: dict = {'kind': kind, 'socMin': soc_min, 'socMax': soc_max}
+    if kind == 'charge/discharge':
+        if power_watts is None:
+            raise MoixaError("power_watts is required for 'charge/discharge' intent")
+        intent['powerWatts'] = power_watts
+    elif kind == 'balance':
+        intent['powerWattsMin'] = power_watts_min if power_watts_min is not None else -20
+        intent['powerWattsMax'] = power_watts_max if power_watts_max is not None else 20
+    return intent
+
+
 def slot_lengths(plan: dict) -> list[int]:
     """Return each slot's length in minutes. A slot's durationMinutes is its end offset within the period."""
     ends = [slot['durationMinutes'] for slot in plan['intents']]

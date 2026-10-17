@@ -10,13 +10,13 @@
 
 ## Easy schedule changes
 
-- [ ] Add a pure schedule module that reads a plan into readable windows (weekday, start, end, kind, power, SoC limits) and builds a plan from such windows. Gaps become `balance`.
-- [ ] Add `set_schedule(device_id, windows)` to the client. It writes the whole week in one PUT.
-- [ ] Support all-week and per-weekday windows, such as "charge to 100% all day, every day".
-- [ ] Take window times in local time. The plan is aligned to Monday 00:00 UTC, so decide how clock changes are handled (UK clocks change on 25 Oct 2026).
-- [ ] Add `get_schedule` output as readable windows next to the raw plan, and accept a raw plan back, so a schedule can be saved and restored.
+- [x] Add a pure schedule module that reads a plan into readable windows (weekday, start, end, kind, power, SoC limits) and builds a plan from such windows. Gaps become `balance`.
+- [x] Add `set_schedule(device_id, windows)` to the client. It writes the whole week in one PUT.
+- [x] Support all-week and per-weekday windows, such as "charge to 100% all day, every day".
+- [x] Take window times in local time. Decided: an IANA `tz` argument, default UTC. Its offset at one moment is applied to the whole week, so `set_schedule` must run again after a clock change.
+- [x] Add `get_schedule` output as readable windows next to the raw plan, and accept a raw plan back, so a schedule can be saved and restored. A raw plan is restored with `set_device_operation_schedule`.
 - [ ] Add the same operations to the MCP server and the CLI.
-- [ ] Update the README schedule section.
+- [x] Update the README schedule section.
 
 ## Follow-up in the ha-moixa repo
 
