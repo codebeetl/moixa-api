@@ -79,11 +79,13 @@ client = MoixaClient(tokens)
 | `get_device_current_operation_mode(device_id)` | Returns current mode and active plan |
 | `set_device_operation_mode(device_id, mode)` | Switch mode: `'smart'`, `'schedule'`, or `'simple'` |
 | `get_device_operation_schedule(device_id)` | Returns the full weekly 7-day schedule plan |
-| `set_device_operation_schedule(device_id, plan)` | Replace the entire schedule plan |
+| `set_device_operation_schedule(device_id, plan)` | Validate and replace the entire schedule plan |
+
+In a plan, each slot's `durationMinutes` is the minute offset within the period at which the slot ends. Offsets rise from slot to slot and none is above `periodDays * 1440` (10080 for a week). `set_device_operation_schedule` raises `MoixaError` for a plan that breaks this, uses an unknown kind, has `charge/discharge` without `powerWatts`, or has `socMin` above `socMax`.
 
 ### Schedule slot helpers
 
-All three helpers are read-modify-write wrappers: they fetch the current schedule, modify the `intents` list, and PUT the result back.
+All three helpers are read-modify-write wrappers: they fetch the current schedule, modify the `intents` list, and PUT the result back. Their `duration_minutes` arguments are slot lengths.
 
 | Method | Description |
 |---|---|

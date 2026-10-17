@@ -2,11 +2,11 @@
 
 ## Schedule helpers corrupt the weekly schedule
 
-- [ ] Confirm what `durationMinutes` means in the schedule plan. On a live battery the slots of a 15-slot week read 629, 898, 2069, 2338 ... 10019 (ascending, repeating daily, none above 10080), so they look like end offsets within the 7-day period. A single all-week slot made in the GridShare web UI reads 10019. `add_schedule_intent`, `edit_schedule_intent` and `delete_schedule_intent` treat the values as slot lengths. Check against the API with the battery in `smart` mode, so the schedule is inactive.
-- [ ] Fix the three helpers so every edit leaves a valid schedule. Deleting the last slot of the live schedule produced 19378, which is more than 10080.
-- [ ] Validate a schedule before the PUT: values in range, ordered, no empty slot, kinds known, `power_watts` set for `charge/discharge`, `soc_min <= soc_max`.
-- [ ] Replace the helper tests in `tests/test_client.py` (they build schedules from slot lengths) once the format is confirmed.
-- [ ] Apply the same fix to the MCP tools `add_schedule_slot`, `edit_schedule_slot` and `delete_schedule_slot` in `moixa_py/mcp_server.py`.
+- [x] Confirm what `durationMinutes` means in the schedule plan. Decided: it is the end offset within the 7-day period. Not yet checked against the API with the battery in `smart` mode.
+- [x] Fix the three helpers so every edit leaves a valid schedule.
+- [x] Validate a schedule before the PUT: values in range, ordered, no empty slot, kinds known, `power_watts` set for `charge/discharge`, `soc_min <= soc_max`.
+- [x] Replace the helper tests in `tests/test_client.py`.
+- [x] Apply the same fix to the MCP tools `add_schedule_slot`, `edit_schedule_slot` and `delete_schedule_slot` in `moixa_py/mcp_server.py`.
 
 ## Easy schedule changes
 
