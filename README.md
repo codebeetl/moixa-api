@@ -176,55 +176,6 @@ for row in parse_jts(forecasts):
     print(row['ts'], row['consumption_W'], row['production_W'])
 ```
 
-## MCP server
-
-The package includes an MCP server that exposes the full API as tools for use with Claude Code or any MCP-compatible client.
-
-### Register with Claude Code
-
-Add this to `~/.claude.json` under `"mcpServers"`:
-
-```json
-{
-  "mcpServers": {
-    "moixa": {
-      "command": "/path/to/.venv/bin/moixa-mcp",
-      "args": [],
-      "env": {}
-    }
-  }
-}
-```
-
-Replace the path with the absolute path to `moixa-mcp` in your virtualenv (find it with `which moixa-mcp` after activating the venv).
-
-### Authentication
-
-On startup the server loads tokens from `~/.moixa_tokens.json`. If no token file exists, set:
-
-```bash
-export MOIXA_USERNAME="you@example.com"
-export MOIXA_PASSWORD="yourpassword"
-```
-
-### Available tools
-
-| Tool | Description |
-|---|---|
-| `get_battery_level` | Current SOC as 0.0-1.0 |
-| `get_site_info` | Site ID and connected devices |
-| `get_user_info` | Account metadata |
-| `get_power_readings` | Real-time power flows (W) |
-| `get_device_readings` | Per-device readings including SOC |
-| `get_forecasts(hours_ahead=24)` | Predicted consumption and solar |
-| `get_tariffs(hours_ahead=24)` | Half-hourly tariff prices |
-| `get_operation_mode` | Current mode and active plan |
-| `get_schedule` | Weekly charge/discharge schedule |
-| `set_operation_mode(mode)` | Switch to `'smart'`, `'schedule'`, or `'simple'` |
-| `add_schedule_slot(kind, duration_minutes, ...)` | Insert a new schedule slot |
-| `edit_schedule_slot(index, ...)` | Edit an existing schedule slot |
-| `delete_schedule_slot(index)` | Delete a schedule slot |
-
 ## CLI
 
 Requires tokens saved by `TokenStore` (default path: `~/.moixa_tokens.json`).
