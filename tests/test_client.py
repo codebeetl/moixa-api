@@ -29,7 +29,7 @@ def mock_response(data, status=200):
 
 
 def make_schedule(*slots):
-    """Build a schedule dict with the given (kind, duration) pairs."""
+    """Build a schedule dict with the given (kind, end offset in minutes) pairs."""
     intents = [
         {'intent': {'kind': kind, 'socMin': 0.1, 'socMax': 1.0}, 'durationMinutes': dur}
         for kind, dur in slots
@@ -73,50 +73,50 @@ class TestBuildIntent:
 # add_schedule_intent
 # ---------------------------------------------------------------------------
 
+def ends(call_args):
+    return [slot['durationMinutes'] for slot in call_args[0][1]['intents']]
+
+
 class TestAddScheduleIntent:
     def test_add_at_position_1_steals_from_slot_0(self):
         client = make_client()
-        schedule = make_schedule(('balance', 500), ('idle', 300))
+        schedule = make_schedule(('balance', 500), ('idle', 800))
         client.get_device_operation_schedule = MagicMock(return_value=schedule)
         client.set_device_operation_schedule = MagicMock()
 
         client.add_schedule_intent('dev', kind='idle', duration_minutes=60, position=1)
 
-        intents = client.set_device_operation_schedule.call_args[0][1]['intents']
-        assert len(intents) == 3
-        assert intents[0]['durationMinutes'] == 440  # 500 - 60
-        assert intents[1]['intent']['kind'] == 'idle'
-        assert intents[1]['durationMinutes'] == 60
-        assert intents[2]['durationMinutes'] == 300  # unchanged
+        args = client.set_device_operation_schedule.call_args
+        assert ends(args) == [440, 500, 800]
+        assert args[0][1]['intents'][1]['intent']['kind'] == 'idle'
 
     def test_append_at_end(self):
         client = make_client()
-        schedule = make_schedule(('balance', 500), ('idle', 300))
+        schedule = make_schedule(('balance', 500), ('idle', 800))
         client.get_device_operation_schedule = MagicMock(return_value=schedule)
         client.set_device_operation_schedule = MagicMock()
 
         client.add_schedule_intent('dev', kind='idle', duration_minutes=100, position=-1)
 
-        intents = client.set_device_operation_schedule.call_args[0][1]['intents']
-        assert len(intents) == 3
-        assert intents[2]['intent']['kind'] == 'idle'
-        assert intents[1]['durationMinutes'] == 200  # 300 - 100 stolen
+        args = client.set_device_operation_schedule.call_args
+        assert ends(args) == [500, 700, 800]
+        assert args[0][1]['intents'][2]['intent']['kind'] == 'idle'
 
     def test_add_at_position_0_steals_from_slot_0(self):
         client = make_client()
-        schedule = make_schedule(('balance', 500), ('idle', 300))
+        schedule = make_schedule(('balance', 500), ('idle', 800))
         client.get_device_operation_schedule = MagicMock(return_value=schedule)
         client.set_device_operation_schedule = MagicMock()
 
         client.add_schedule_intent('dev', kind='idle', duration_minutes=60, position=0)
 
-        intents = client.set_device_operation_schedule.call_args[0][1]['intents']
-        assert intents[0]['intent']['kind'] == 'idle'
-        assert intents[1]['durationMinutes'] == 440  # 500 - 60
+        args = client.set_device_operation_schedule.call_args
+        assert ends(args) == [60, 500, 800]
+        assert args[0][1]['intents'][0]['intent']['kind'] == 'idle'
 
     def test_raises_when_not_enough_time(self):
         client = make_client()
-        schedule = make_schedule(('balance', 50), ('idle', 300))
+        schedule = make_schedule(('balance', 50), ('idle', 350))
         client.get_device_operation_schedule = MagicMock(return_value=schedule)
         client.set_device_operation_schedule = MagicMock()
 
@@ -131,31 +131,29 @@ class TestAddScheduleIntent:
 class TestEditScheduleIntent:
     def test_edit_soc_min(self):
         client = make_client()
-        schedule = make_schedule(('balance', 500), ('idle', 300))
+        schedule = make_schedule(('balance', 500), ('idle', 800))
         client.get_device_operation_schedule = MagicMock(return_value=schedule)
         client.set_device_operation_schedule = MagicMock()
 
         client.edit_schedule_intent('dev', index=0, soc_min=0.2)
 
-        intents = client.set_device_operation_schedule.call_args[0][1]['intents']
-        assert intents[0]['intent']['socMin'] == 0.2
-        assert intents[0]['durationMinutes'] == 500  # unchanged
+        args = client.set_device_operation_schedule.call_args
+        assert args[0][1]['intents'][0]['intent']['socMin'] == 0.2
+        assert ends(args) == [500, 800]
 
     def test_edit_duration_adjusts_neighbour(self):
         client = make_client()
-        schedule = make_schedule(('balance', 500), ('idle', 300))
+        schedule = make_schedule(('balance', 500), ('idle', 800))
         client.get_device_operation_schedule = MagicMock(return_value=schedule)
         client.set_device_operation_schedule = MagicMock()
 
         client.edit_schedule_intent('dev', index=0, duration_minutes=400)
 
-        intents = client.set_device_operation_schedule.call_args[0][1]['intents']
-        assert intents[0]['durationMinutes'] == 400
-        assert intents[1]['durationMinutes'] == 400  # gained 100
+        assert ends(client.set_device_operation_schedule.call_args) == [400, 800]
 
     def test_edit_duration_raises_when_neighbour_too_small(self):
         client = make_client()
-        schedule = make_schedule(('balance', 500), ('idle', 10))
+        schedule = make_schedule(('balance', 500), ('idle', 510))
         client.get_device_operation_schedule = MagicMock(return_value=schedule)
         client.set_device_operation_schedule = MagicMock()
 
@@ -164,8 +162,8 @@ class TestEditScheduleIntent:
 
     def test_no_change_when_no_args(self):
         client = make_client()
-        schedule = make_schedule(('balance', 500), ('idle', 300))
-        original_schedule = make_schedule(('balance', 500), ('idle', 300))
+        schedule = make_schedule(('balance', 500), ('idle', 800))
+        original_schedule = make_schedule(('balance', 500), ('idle', 800))
         client.get_device_operation_schedule = MagicMock(return_value=schedule)
         client.set_device_operation_schedule = MagicMock()
 
@@ -182,28 +180,33 @@ class TestEditScheduleIntent:
 class TestDeleteScheduleIntent:
     def test_delete_middle_slot(self):
         client = make_client()
-        schedule = make_schedule(('balance', 500), ('idle', 100), ('balance', 300))
+        schedule = make_schedule(('balance', 500), ('idle', 600), ('balance', 900))
         client.get_device_operation_schedule = MagicMock(return_value=schedule)
         client.set_device_operation_schedule = MagicMock()
 
         client.delete_schedule_intent('dev', index=1)
 
-        intents = client.set_device_operation_schedule.call_args[0][1]['intents']
-        assert len(intents) == 2
-        assert intents[0]['durationMinutes'] == 600  # 500 + 100
-        assert intents[1]['durationMinutes'] == 300
+        assert ends(client.set_device_operation_schedule.call_args) == [600, 900]
 
     def test_delete_first_slot_gives_time_to_new_first(self):
         client = make_client()
-        schedule = make_schedule(('idle', 100), ('balance', 500))
+        schedule = make_schedule(('idle', 100), ('balance', 600))
         client.get_device_operation_schedule = MagicMock(return_value=schedule)
         client.set_device_operation_schedule = MagicMock()
 
         client.delete_schedule_intent('dev', index=0)
 
-        intents = client.set_device_operation_schedule.call_args[0][1]['intents']
-        assert len(intents) == 1
-        assert intents[0]['durationMinutes'] == 600  # 500 + 100
+        assert ends(client.set_device_operation_schedule.call_args) == [600]
+
+    def test_delete_last_slot_keeps_week_end(self):
+        client = make_client()
+        schedule = make_schedule(('balance', 500), ('idle', 800), ('balance', 1000))
+        client.get_device_operation_schedule = MagicMock(return_value=schedule)
+        client.set_device_operation_schedule = MagicMock()
+
+        client.delete_schedule_intent('dev', index=2)
+
+        assert ends(client.set_device_operation_schedule.call_args) == [500, 1000]
 
     def test_delete_only_slot_raises(self):
         client = make_client()
@@ -213,6 +216,45 @@ class TestDeleteScheduleIntent:
 
         with pytest.raises(MoixaError, match='only schedule slot'):
             client.delete_schedule_intent('dev', index=0)
+
+
+# ---------------------------------------------------------------------------
+# set_device_operation_schedule validation
+# ---------------------------------------------------------------------------
+
+def plan_with(*slots, **intent_overrides):
+    plan = make_schedule(*slots)['plan']
+    plan['intents'][0]['intent'].update(intent_overrides)
+    return plan
+
+
+class TestSetDeviceOperationScheduleValidation:
+    def test_valid_plan_is_sent(self):
+        client = make_client()
+        client._put = MagicMock(return_value=mock_response({}))
+
+        client.set_device_operation_schedule('dev', plan_with(('balance', 500), ('idle', 10080)))
+
+        client._put.assert_called_once()
+
+    @pytest.mark.parametrize('plan', [
+        {'periodDays': 7, 'intents': []},
+        plan_with(('balance', 500), ('idle', 10081)),
+        plan_with(('balance', 500), ('idle', 500)),
+        plan_with(('balance', 500), ('idle', 400)),
+        plan_with(('balance', 0), ('idle', 400)),
+        plan_with(('turbo', 500)),
+        plan_with(('charge/discharge', 500)),
+        plan_with(('balance', 500), socMin=0.9, socMax=0.5),
+    ])
+    def test_invalid_plan_is_rejected_before_put(self, plan):
+        client = make_client()
+        client._put = MagicMock(return_value=mock_response({}))
+
+        with pytest.raises(MoixaError):
+            client.set_device_operation_schedule('dev', plan)
+
+        client._put.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

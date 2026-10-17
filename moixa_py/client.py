@@ -10,6 +10,7 @@ from aws_requests_auth.aws_auth import AWSRequestsAuth
 from .auth import CognitoTokens, refresh_tokens
 from .constants import AWS_REGION, COGNITO_IDENTITY_POOL_ID, COGNITO_USER_POOL_ID
 from .exceptions import MoixaAuthError, MoixaError
+from .schedule import INTENT_KINDS, set_slot_lengths, slot_lengths, validate_plan
 
 
 @dataclass
@@ -173,7 +174,8 @@ class MoixaClient:
         response.raise_for_status()
 
     def set_device_operation_schedule(self, device_id: str, plan: dict) -> None:
-        """Replace the weekly schedule plan. Pass the full plan dict as returned by get_device_operation_schedule()."""
+        """Replace the weekly schedule plan after validating it. Pass the full plan dict as returned by get_device_operation_schedule()."""
+        validate_plan(plan)
         response = self._put(
             f'{self.api_url}/users/current/devices/{device_id}/operationModes/schedule',
             json={'plan': plan},
@@ -187,7 +189,7 @@ class MoixaClient:
                       power_watts: float = None,
                       power_watts_min: float = None,
                       power_watts_max: float = None) -> dict:
-        if kind not in ('balance', 'charge/discharge', 'idle'):
+        if kind not in INTENT_KINDS:
             raise MoixaError(f"Unknown intent kind {kind!r}. Use 'balance', 'charge/discharge', or 'idle'.")
         intent: dict = {'kind': kind, 'socMin': soc_min, 'socMax': soc_max}
         if kind == 'charge/discharge':
@@ -207,21 +209,24 @@ class MoixaClient:
         """Insert a new intent slot. Time is stolen from the neighbouring slot.
         position=-1 appends to the end. Intent kinds: 'balance', 'charge/discharge', 'idle'."""
         schedule = self.get_device_operation_schedule(device_id)
-        intents = schedule['plan']['intents']
+        plan = schedule['plan']
+        intents = plan['intents']
+        lengths = slot_lengths(plan)
         if position == -1:
             position = len(intents)
         steal_idx = (position - 1) if position > 0 else 0
-        if intents[steal_idx]['durationMinutes'] <= duration_minutes:
+        if lengths[steal_idx] <= duration_minutes:
             raise MoixaError(
-                f'Slot {steal_idx} only has {intents[steal_idx]["durationMinutes"]} min; '
+                f'Slot {steal_idx} only has {lengths[steal_idx]} min; '
                 f'cannot steal {duration_minutes} min'
             )
-        intents[steal_idx]['durationMinutes'] -= duration_minutes
+        lengths[steal_idx] -= duration_minutes
+        lengths.insert(position, duration_minutes)
         intents.insert(position, {
             'intent': self._build_intent(kind, soc_min, soc_max, power_watts, power_watts_min, power_watts_max),
-            'durationMinutes': duration_minutes,
         })
-        self.set_device_operation_schedule(device_id, schedule['plan'])
+        set_slot_lengths(plan, lengths)
+        self.set_device_operation_schedule(device_id, plan)
 
     def edit_schedule_intent(self, device_id: str, index: int,
                               kind: str = None, duration_minutes: int = None,
@@ -232,33 +237,37 @@ class MoixaClient:
         """Edit fields of an existing intent slot. Only supplied arguments are changed.
         If duration_minutes changes, the difference is absorbed by the neighbouring slot."""
         schedule = self.get_device_operation_schedule(device_id)
-        intents = schedule['plan']['intents']
-        slot = intents[index]
-        if duration_minutes is not None and duration_minutes != slot['durationMinutes']:
+        plan = schedule['plan']
+        lengths = slot_lengths(plan)
+        if duration_minutes is not None and duration_minutes != lengths[index]:
             neighbour = (index - 1) if index > 0 else index + 1
-            diff = duration_minutes - slot['durationMinutes']
-            if intents[neighbour]['durationMinutes'] - diff < 1:
+            diff = duration_minutes - lengths[index]
+            if lengths[neighbour] - diff < 1:
                 raise MoixaError(f'Slot {neighbour} cannot absorb a {diff:+d} min duration change')
-            intents[neighbour]['durationMinutes'] -= diff
-            slot['durationMinutes'] = duration_minutes
-        intent = slot['intent']
+            lengths[neighbour] -= diff
+            lengths[index] = duration_minutes
+            set_slot_lengths(plan, lengths)
+        intent = plan['intents'][index]['intent']
         for attr, val in [('kind', kind), ('socMin', soc_min), ('socMax', soc_max),
                           ('powerWatts', power_watts), ('powerWattsMin', power_watts_min),
                           ('powerWattsMax', power_watts_max)]:
             if val is not None:
                 intent[attr] = val
-        self.set_device_operation_schedule(device_id, schedule['plan'])
+        self.set_device_operation_schedule(device_id, plan)
 
     def delete_schedule_intent(self, device_id: str, index: int) -> None:
         """Remove an intent slot. Its duration is given to the neighbouring slot."""
         schedule = self.get_device_operation_schedule(device_id)
-        intents = schedule['plan']['intents']
+        plan = schedule['plan']
+        intents = plan['intents']
         if len(intents) <= 1:
             raise MoixaError('Cannot delete the only schedule slot')
-        removed = intents.pop(index)
-        neighbour = (index - 1) if index > 0 else 0
-        intents[neighbour]['durationMinutes'] += removed['durationMinutes']
-        self.set_device_operation_schedule(device_id, schedule['plan'])
+        lengths = slot_lengths(plan)
+        intents.pop(index)
+        removed_length = lengths.pop(index)
+        lengths[(index - 1) if index > 0 else 0] += removed_length
+        set_slot_lengths(plan, lengths)
+        self.set_device_operation_schedule(device_id, plan)
 
     @staticmethod
     def parse_jts(data: dict) -> list:

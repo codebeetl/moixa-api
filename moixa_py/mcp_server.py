@@ -129,7 +129,10 @@ def get_operation_mode() -> dict:
 
 @mcp.tool()
 def get_schedule() -> list:
-    """Weekly charge/discharge schedule as a list of intent slots with kind, duration, and SOC limits."""
+    """Weekly charge/discharge schedule as a list of intent slots with kind, SOC limits, and durationMinutes.
+
+    durationMinutes is the minute offset within the 7-day period (0 = Monday 00:00 UTC) at which the slot ends.
+    """
     schedule = _get_client().get_device_operation_schedule(_get_battery_id())
     return schedule['plan']['intents']
 
