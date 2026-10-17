@@ -128,6 +128,14 @@ A `ScheduleWindow(start, end, kind, days=ALL_DAYS, soc_min, soc_max, power_watts
 
 The plan is aligned to Monday 00:00 UTC. `tz` is an IANA zone name, and its UTC offset at `at` (default now) is applied to the whole week. After a clock change, call `set_schedule` again to move the windows.
 
+The conversions are also available without a client in `moixa_api.schedule_windows`:
+
+| Function | Description |
+|---|---|
+| `windows_to_plan(windows, plan, utc_offset=0)` | Returns a copy of `plan` whose intents cover the week with the windows. `utc_offset` is in minutes |
+| `plan_to_windows(plan, utc_offset=0)` | Returns the plan as single-day windows, split at midnight and sorted by weekday and start |
+| `utc_offset_minutes(tz, at=None)` | Returns the UTC offset in minutes of an IANA zone at `at` (default now) |
+
 ```python
 from datetime import time
 from moixa_api.schedule_windows import ScheduleWindow
