@@ -115,6 +115,38 @@ client.delete_schedule_intent(battery_id, index=2)
 client.set_device_operation_mode(battery_id, 'schedule')
 ```
 
+### Schedule windows
+
+`get_schedule` and `set_schedule` work with readable windows instead of raw slots.
+
+| Method | Description |
+|---|---|
+| `get_schedule(device_id, tz='UTC', at=None)` | Returns `{'plan': <raw plan>, 'windows': [ScheduleWindow, ...]}` with window times in time zone `tz` |
+| `set_schedule(device_id, windows, tz='UTC', at=None)` | Replaces the whole week with the given windows in one PUT. Time not covered by a window becomes `balance` |
+
+A `ScheduleWindow(start, end, kind, days=ALL_DAYS, soc_min, soc_max, power_watts, ...)` covers a time range on the given weekdays (0 = Monday). A window with no `days` repeats every day. An `end` of `00:00` is the end of the day. An `end` at or before `start` runs past midnight. Overlapping windows raise `MoixaError`.
+
+The plan is aligned to Monday 00:00 UTC. `tz` is an IANA zone name, and its UTC offset at `at` (default now) is applied to the whole week. After a clock change, call `set_schedule` again to move the windows.
+
+```python
+from datetime import time
+from moixa_py.schedule_windows import ScheduleWindow
+
+# Charge to 100% all day, every day
+client.set_schedule(battery_id, [
+    ScheduleWindow(time(0, 0), time(0, 0), 'charge/discharge', power_watts=3000),
+])
+
+# Charge 00:30-05:30 UK time on weekdays only
+client.set_schedule(battery_id, [
+    ScheduleWindow(time(0, 30), time(5, 30), 'charge/discharge', days=(0, 1, 2, 3, 4), power_watts=3000),
+], tz='Europe/London')
+
+# Save and restore the raw plan
+saved = client.get_schedule(battery_id)['plan']
+client.set_device_operation_schedule(battery_id, saved)
+```
+
 ### History
 
 | Method | Returns |
@@ -213,7 +245,7 @@ pip install ".[dev]"
 pytest
 ```
 
-Tests cover `CognitoTokens`, `TokenStore`, `_build_intent`, and all three schedule slot helpers. No network calls are made.
+Tests cover `CognitoTokens`, `TokenStore`, `_build_intent`, schedule validation, all three schedule slot helpers, and schedule windows. No network calls are made.
 
 ## Caveat
 
