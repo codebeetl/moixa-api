@@ -8,12 +8,11 @@ version = "0.2.0"
 description = "Unofficial Python client for the Moixa GridShare API inferred from APK analysis"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["requests>=2.34.2", "pycognito", "aws-requests-auth", "boto3>=1.43.40", "mcp[cli]>=1.28.1"]
+dependencies = ["requests>=2.34.2", "pycognito", "aws-requests-auth", "boto3>=1.43.40"]
 authors = [{name = "codebeetl"}]
 
 [project.scripts]
 moixa = "moixa_api.cli:main"
-moixa-mcp = "moixa_api.mcp_server:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=9.1.1"]
