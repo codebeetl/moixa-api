@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from moixa_py import MoixaCognitoAuth, MoixaClient, TokenStore
+from moixa_api import MoixaCognitoAuth, MoixaClient, TokenStore
 
 load_dotenv()
 

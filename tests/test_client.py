@@ -2,10 +2,10 @@ from datetime import time
 from unittest.mock import MagicMock, patch, call
 import pytest
 
-from moixa_py.auth import CognitoTokens
-from moixa_py.client import MoixaClient
-from moixa_py.exceptions import MoixaError
-from moixa_py.schedule_windows import ScheduleWindow
+from moixa_api.auth import CognitoTokens
+from moixa_api.client import MoixaClient
+from moixa_api.exceptions import MoixaError
+from moixa_api.schedule_windows import ScheduleWindow
 
 
 FAKE_TOKENS = CognitoTokens(
@@ -334,7 +334,7 @@ class TestParseJts:
         assert rows[1]['val'] == 2.0
 
     def test_importable_as_top_level(self):
-        from moixa_py import parse_jts
+        from moixa_api import parse_jts
         assert callable(parse_jts)
 
 

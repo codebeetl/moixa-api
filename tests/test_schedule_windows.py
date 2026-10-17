@@ -2,9 +2,9 @@ from datetime import datetime, time, timezone
 
 import pytest
 
-from moixa_py.exceptions import MoixaError
-from moixa_py.schedule import validate_plan
-from moixa_py.schedule_windows import (
+from moixa_api.exceptions import MoixaError
+from moixa_api.schedule import validate_plan
+from moixa_api.schedule_windows import (
     ScheduleWindow,
     plan_to_windows,
     utc_offset_minutes,
